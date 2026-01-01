@@ -298,9 +298,10 @@ bool fb_init(struct framebuffer_t *fb)
 		/* parse rotate:N from YAFT environment variable */
 		char *rotate_str = strstr(env, "rotate:");
 		if (rotate_str) {
-			int rotate_val = atoi(rotate_str + 7); /* skip "rotate:" */
-			if (rotate_val >= 0 && rotate_val <= 3)
-				fb->rotate = rotate_val;
+			char *endptr;
+			long rotate_val = strtol(rotate_str + 7, &endptr, 10); /* skip "rotate:" */
+			if (endptr != (rotate_str + 7) && rotate_val >= 0 && rotate_val <= 3)
+				fb->rotate = (int)rotate_val;
 		}
 	}
 
@@ -384,6 +385,18 @@ void fb_die(struct framebuffer_t *fb)
 	//fb_release(fb->fd, &fb->info); /* os specific */
 }
 
+static inline void get_physical_dimensions(struct framebuffer_t *fb, int *phys_width, int *phys_height)
+{
+	/* get physical dimensions (before rotation swap) */
+	if (fb->rotate == 1 || fb->rotate == 3) {
+		*phys_width = fb->info.height;
+		*phys_height = fb->info.width;
+	} else {
+		*phys_width = fb->info.width;
+		*phys_height = fb->info.height;
+	}
+}
+
 static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y, 
 	int physical_width, int physical_height, int *out_x, int *out_y, int *out_line_offset)
 {
@@ -423,14 +436,7 @@ static inline void draw_sixel(struct framebuffer_t *fb, int line, int col, uint8
 	int phys_width, phys_height, rot_x, rot_y, line_offset;
 	uint32_t pixel, color = 0;
 
-	/* get physical dimensions (before rotation swap) */
-	if (fb->rotate == 1 || fb->rotate == 3) {
-		phys_width = fb->info.height;
-		phys_height = fb->info.width;
-	} else {
-		phys_width = fb->info.width;
-		phys_height = fb->info.height;
-	}
+	get_physical_dimensions(fb, &phys_width, &phys_height);
 
 	for (h = 0; h < CELL_HEIGHT; h++) {
 		for (w = 0; w < CELL_WIDTH; w++) {
@@ -457,14 +463,7 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 	struct color_pair_t color_pair;
 	struct cell_t *cellp;
 
-	/* get physical dimensions (before rotation swap) */
-	if (fb->rotate == 1 || fb->rotate == 3) {
-		phys_width = fb->info.height;
-		phys_height = fb->info.width;
-	} else {
-		phys_width = fb->info.width;
-		phys_height = fb->info.height;
-	}
+	get_physical_dimensions(fb, &phys_width, &phys_height);
 
 	for (col = term->cols - 1; col >= 0; col--) {
 		margin_right = (term->cols - 1 - col) * CELL_WIDTH;
@@ -523,16 +522,14 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 		}
 	}
 
-	/* actual display update (bit blit) - need to copy entire buffer for rotation */
-	if (fb->rotate != 0) {
-		/* with rotation, we need to copy the entire buffer */
-		memcpy(fb->fp, fb->buf, fb->info.screen_size);
-	} else {
-		/* without rotation, we can just copy the line */
+	/* actual display update (bit blit) */
+	if (fb->rotate == 0) {
+		/* without rotation, we can optimize by copying only the line */
 		pos = (line * CELL_HEIGHT) * fb->info.line_length;
 		size = CELL_HEIGHT * fb->info.line_length;
 		memcpy(fb->fp + pos, fb->buf + pos, size);
 	}
+	/* Note: with rotation, refresh() will handle the full buffer copy after all dirty lines are drawn */
 
 	/* TODO: page flip
 		if fb_fix_screeninfo.ypanstep > 0, we can use hardware panning.
@@ -559,5 +556,10 @@ void refresh(struct framebuffer_t *fb, struct terminal_t *term)
 		if (term->line_dirty[line]) {
 			draw_line(fb, term, line);
 		}
+	}
+
+	/* with rotation, copy entire buffer after all lines are drawn to optimize performance */
+	if (fb->rotate != 0) {
+		memcpy(fb->fp, fb->buf, fb->info.screen_size);
 	}
 }
