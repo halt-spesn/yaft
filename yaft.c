@@ -127,8 +127,11 @@ const char *find_shell(void)
 	char *env_shell;
 	
 	/* try SHELL environment variable first */
-	if ((env_shell = getenv("SHELL")) != NULL && access(env_shell, X_OK) == 0)
-		return env_shell;
+	if ((env_shell = getenv("SHELL")) != NULL) {
+		/* validate: must be absolute path and executable */
+		if (env_shell[0] == '/' && access(env_shell, X_OK) == 0)
+			return env_shell;
+	}
 	
 	/* try common shell locations */
 	const char *shells[] = {
