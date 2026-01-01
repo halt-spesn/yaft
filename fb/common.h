@@ -402,6 +402,36 @@ static inline void get_terminal_dimensions(struct framebuffer_t *fb, int *term_w
 	}
 }
 
+static inline void apply_terminal_size_override(int *term_width, int *term_height)
+{
+	char *env_cols, *env_lines, *endptr;
+	long cols_val, lines_val;
+	
+	/* Check for YAFT_COLS environment variable */
+	if ((env_cols = getenv("YAFT_COLS")) != NULL) {
+		errno = 0;
+		cols_val = strtol(env_cols, &endptr, 10);
+		if (errno == 0 && endptr > env_cols && cols_val > 0 && cols_val <= 500) {
+			/* Override with cols * CELL_WIDTH */
+			*term_width = (int)cols_val * CELL_WIDTH;
+			logging(DEBUG, "terminal width overridden via YAFT_COLS=%ld (width=%d)\n", 
+				cols_val, *term_width);
+		}
+	}
+	
+	/* Check for YAFT_LINES environment variable */
+	if ((env_lines = getenv("YAFT_LINES")) != NULL) {
+		errno = 0;
+		lines_val = strtol(env_lines, &endptr, 10);
+		if (errno == 0 && endptr > env_lines && lines_val > 0 && lines_val <= 200) {
+			/* Override with lines * CELL_HEIGHT */
+			*term_height = (int)lines_val * CELL_HEIGHT;
+			logging(DEBUG, "terminal height overridden via YAFT_LINES=%ld (height=%d)\n", 
+				lines_val, *term_height);
+		}
+	}
+}
+
 static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y, 
 	int physical_width, int physical_height, int *out_x, int *out_y)
 {
