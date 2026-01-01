@@ -11,6 +11,9 @@ jobs:
   build-arm-static:
     runs-on: ubuntu-latest
     
+    permissions:
+      contents: read
+    
     strategy:
       matrix:
         arch: [armv7, aarch64]
