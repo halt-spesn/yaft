@@ -25,27 +25,22 @@ jobs:
         if [ "${{ matrix.arch }}" = "armv7" ]; then
           sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
           echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "ARCH_NAME=armv7" >> $GITHUB_ENV
+          echo "READELF=arm-linux-gnueabihf-readelf" >> $GITHUB_ENV
         elif [ "${{ matrix.arch }}" = "aarch64" ]; then
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "ARCH_NAME=aarch64" >> $GITHUB_ENV
+          echo "READELF=aarch64-linux-gnu-readelf" >> $GITHUB_ENV
         fi
     
     - name: Build yaft statically for ARM
       run: |
         export LANG=en_US.UTF-8
-        make CC=$CC CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3 -pipe -static" LDFLAGS="-static"
+        make CC=$CC CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3 -pipe" LDFLAGS="-static"
     
     - name: Verify static binary
       run: |
-        if [ "${{ matrix.arch }}" = "armv7" ]; then
-          file yaft
-          arm-linux-gnueabihf-readelf -d yaft || echo "Static binary (no dynamic section expected)"
-        elif [ "${{ matrix.arch }}" = "aarch64" ]; then
-          file yaft
-          aarch64-linux-gnu-readelf -d yaft || echo "Static binary (no dynamic section expected)"
-        fi
+        file yaft
+        $READELF -d yaft || echo "Static binary (no dynamic section expected)"
     
     - name: Upload ARM static binary
       uses: actions/upload-artifact@v4
