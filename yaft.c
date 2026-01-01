@@ -192,6 +192,7 @@ int main(int argc, char *const argv[])
 	struct timeval tv;
 	struct framebuffer_t fb;
 	struct terminal_t term;
+	int term_width, term_height;
 	/* global */
 	extern volatile sig_atomic_t need_redraw;
 	extern volatile sig_atomic_t child_alive;
@@ -206,7 +207,10 @@ int main(int argc, char *const argv[])
 		goto fb_init_failed;
 	}
 
-	if (!term_init(&term, fb.info.width, fb.info.height)) {
+	/* get terminal dimensions (may be rotated) */
+	get_terminal_dimensions(&fb, &term_width, &term_height);
+	
+	if (!term_init(&term, term_width, term_height)) {
 		logging(FATAL, "terminal initialize failed\n");
 		goto term_init_failed;
 	}

@@ -316,12 +316,8 @@ bool fb_init(struct framebuffer_t *fb)
 	if (!set_fbinfo(fb->fd, &fb->info))
 		goto set_fbinfo_failed;
 
-	/* swap width/height for 90 or 270 degree rotation */
-	if (fb->rotate == 1 || fb->rotate == 3) {
-		int tmp = fb->info.width;
-		fb->info.width = fb->info.height;
-		fb->info.height = tmp;
-	}
+	/* Note: fb->info.width/height always represent physical framebuffer dimensions */
+	/* Rotation is handled by coordinate transformation in drawing functions */
 
 	if (VERBOSE)
 		fb_print_info(&fb->info);
@@ -389,13 +385,20 @@ void fb_die(struct framebuffer_t *fb)
 
 static inline void get_physical_dimensions(struct framebuffer_t *fb, int *phys_width, int *phys_height)
 {
-	/* get physical dimensions (before rotation swap) */
+	/* fb->info.width/height are always physical dimensions */
+	*phys_width = fb->info.width;
+	*phys_height = fb->info.height;
+}
+
+static inline void get_terminal_dimensions(struct framebuffer_t *fb, int *term_width, int *term_height)
+{
+	/* For 90/270 degree rotation, terminal dimensions are swapped from physical */
 	if (fb->rotate == 1 || fb->rotate == 3) {
-		*phys_width = fb->info.height;
-		*phys_height = fb->info.width;
+		*term_width = fb->info.height;
+		*term_height = fb->info.width;
 	} else {
-		*phys_width = fb->info.width;
-		*phys_height = fb->info.height;
+		*term_width = fb->info.width;
+		*term_height = fb->info.height;
 	}
 }
 
