@@ -22,6 +22,14 @@ enum {
 	REPLACEMENT_CHAR = 0x003F, /* used for malformed UTF-8 sequence   : U+003F (QUESTION MARK) */
 };
 
+/* rotation */
+enum {
+	ROTATE_0   = 0, /* 0 degree (normal) */
+	ROTATE_90  = 1, /* 90 degree clockwise (same as fbcon=rotate:1) */
+	ROTATE_180 = 2, /* 180 degree */
+	ROTATE_270 = 3, /* 270 degree clockwise (same as fbcon=rotate:3) */
+};
+
 /* TERM value */
 const char *term_name = "yaft-256color";
 
