@@ -390,16 +390,53 @@ static inline void get_physical_dimensions(struct framebuffer_t *fb, int *phys_w
 	*phys_height = fb->info.height;
 }
 
+static inline double get_scale_factor(void)
+{
+	char *env_scale, *endptr;
+	double scale_val;
+	const double valid_scales[] = {0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
+	const int num_scales = sizeof(valid_scales) / sizeof(valid_scales[0]);
+	
+	/* Check for YAFT_SCALE environment variable */
+	if ((env_scale = getenv("YAFT_SCALE")) != NULL) {
+		errno = 0;
+		scale_val = strtod(env_scale, &endptr);
+		
+		/* Validate parsing was successful */
+		if (errno == 0 && endptr > env_scale && scale_val > 0) {
+			/* Check if scale is one of the allowed values */
+			for (int i = 0; i < num_scales; i++) {
+				if (fabs(scale_val - valid_scales[i]) < 0.01) {
+					logging(DEBUG, "scale factor set to %.2f via YAFT_SCALE\n", valid_scales[i]);
+					return valid_scales[i];
+				}
+			}
+			logging(WARN, "YAFT_SCALE=%.2f is not a valid scale (valid: 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0), using 1.0\n", 
+				scale_val);
+		}
+	}
+	
+	return 1.0; /* default: no scaling */
+}
+
 static inline void get_terminal_dimensions(struct framebuffer_t *fb, int *term_width, int *term_height)
 {
-	/* For 90/270 degree rotation, terminal dimensions are swapped from physical */
+	double scale;
+	int base_width, base_height;
+	
+	/* Get base dimensions (may be rotated) */
 	if (fb->rotate == 1 || fb->rotate == 3) {
-		*term_width = fb->info.height;
-		*term_height = fb->info.width;
+		base_width = fb->info.height;
+		base_height = fb->info.width;
 	} else {
-		*term_width = fb->info.width;
-		*term_height = fb->info.height;
+		base_width = fb->info.width;
+		base_height = fb->info.height;
 	}
+	
+	/* Apply scale factor if set */
+	scale = get_scale_factor();
+	*term_width = (int)(base_width / scale);
+	*term_height = (int)(base_height / scale);
 }
 
 static inline void apply_terminal_size_override(int *term_width, int *term_height, 
