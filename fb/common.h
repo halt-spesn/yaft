@@ -47,6 +47,7 @@ struct framebuffer_t {
 	uint32_t real_palette[COLORS]; /* hardware specific color palette */
 	struct fb_info_t info;
 	cmap_t *cmap, *cmap_orig;
+	int rotate;                    /* rotation angle: 0, 1(90), 2(180), 3(270) */
 };
 
 /* common framebuffer functions */
@@ -291,6 +292,18 @@ bool fb_init(struct framebuffer_t *fb)
 	const char *path;
 	char *env;
 
+	/* initialize rotation */
+	fb->rotate = 0;
+	if ((env = getenv("YAFT")) && strstr(env, "rotate")) {
+		/* parse rotate:N from YAFT environment variable */
+		char *rotate_str = strstr(env, "rotate:");
+		if (rotate_str) {
+			int rotate_val = atoi(rotate_str + 7); /* skip "rotate:" */
+			if (rotate_val >= 0 && rotate_val <= 3)
+				fb->rotate = rotate_val;
+		}
+	}
+
 	/* open framebuffer device: check FRAMEBUFFER env at first */
 	path = ((env = getenv("FRAMEBUFFER")) == NULL) ? fb_path: env;
 	if ((fb->fd = eopen(path, O_RDWR)) < 0)
@@ -299,6 +312,13 @@ bool fb_init(struct framebuffer_t *fb)
 	/* os dependent initialize */
 	if (!set_fbinfo(fb->fd, &fb->info))
 		goto set_fbinfo_failed;
+
+	/* swap width/height for 90 or 270 degree rotation */
+	if (fb->rotate == 1 || fb->rotate == 3) {
+		int tmp = fb->info.width;
+		fb->info.width = fb->info.height;
+		fb->info.height = tmp;
+	}
 
 	if (VERBOSE)
 		fb_print_info(&fb->info);
@@ -364,18 +384,64 @@ void fb_die(struct framebuffer_t *fb)
 	//fb_release(fb->fd, &fb->info); /* os specific */
 }
 
+static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y, 
+	int physical_width, int physical_height, int *out_x, int *out_y, int *out_line_offset)
+{
+	/* physical_width and physical_height are the actual hardware dimensions */
+	switch (fb->rotate) {
+	case 0: /* no rotation */
+		*out_x = x;
+		*out_y = y;
+		*out_line_offset = fb->info.line_length;
+		break;
+	case 1: /* 90 degree clockwise */
+		*out_x = physical_height - 1 - y;
+		*out_y = x;
+		*out_line_offset = fb->info.line_length;
+		break;
+	case 2: /* 180 degree */
+		*out_x = physical_width - 1 - x;
+		*out_y = physical_height - 1 - y;
+		*out_line_offset = fb->info.line_length;
+		break;
+	case 3: /* 270 degree clockwise (90 counter-clockwise) */
+		*out_x = y;
+		*out_y = physical_width - 1 - x;
+		*out_line_offset = fb->info.line_length;
+		break;
+	default:
+		*out_x = x;
+		*out_y = y;
+		*out_line_offset = fb->info.line_length;
+		break;
+	}
+}
+
 static inline void draw_sixel(struct framebuffer_t *fb, int line, int col, uint8_t *pixmap)
 {
 	int h, w, src_offset, dst_offset;
+	int phys_width, phys_height, rot_x, rot_y, line_offset;
 	uint32_t pixel, color = 0;
+
+	/* get physical dimensions (before rotation swap) */
+	if (fb->rotate == 1 || fb->rotate == 3) {
+		phys_width = fb->info.height;
+		phys_height = fb->info.width;
+	} else {
+		phys_width = fb->info.width;
+		phys_height = fb->info.height;
+	}
 
 	for (h = 0; h < CELL_HEIGHT; h++) {
 		for (w = 0; w < CELL_WIDTH; w++) {
 			src_offset = BYTES_PER_PIXEL * (h * CELL_WIDTH + w);
 			memcpy(&color, pixmap + src_offset, BYTES_PER_PIXEL);
 
-			dst_offset = (line * CELL_HEIGHT + h) * fb->info.line_length
-				+ (col * CELL_WIDTH + w) * fb->info.bytes_per_pixel;
+			int x = col * CELL_WIDTH + w;
+			int y = line * CELL_HEIGHT + h;
+			get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y, &line_offset);
+
+			dst_offset = rot_y * line_offset + rot_x * fb->info.bytes_per_pixel;
 			pixel = color2pixel(&fb->info, color);
 			memcpy(fb->buf + dst_offset, &pixel, fb->info.bytes_per_pixel);
 		}
@@ -386,9 +452,19 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 {
 	int pos, size, bdf_padding, glyph_width, margin_right;
 	int col, w, h;
+	int phys_width, phys_height, rot_x, rot_y, line_offset;
 	uint32_t pixel;
 	struct color_pair_t color_pair;
 	struct cell_t *cellp;
+
+	/* get physical dimensions (before rotation swap) */
+	if (fb->rotate == 1 || fb->rotate == 3) {
+		phys_width = fb->info.height;
+		phys_height = fb->info.width;
+	} else {
+		phys_width = fb->info.width;
+		phys_height = fb->info.height;
+	}
 
 	for (col = term->cols - 1; col >= 0; col--) {
 		margin_right = (term->cols - 1 - col) * CELL_WIDTH;
@@ -426,8 +502,12 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 				color_pair.bg = color_pair.fg;
 
 			for (w = 0; w < CELL_WIDTH; w++) {
-				pos = (term->width - 1 - margin_right - w) * fb->info.bytes_per_pixel
-					+ (line * CELL_HEIGHT + h) * fb->info.line_length;
+				int x = term->width - 1 - margin_right - w;
+				int y = line * CELL_HEIGHT + h;
+				
+				/* apply rotation */
+				get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y, &line_offset);
+				pos = rot_y * line_offset + rot_x * fb->info.bytes_per_pixel;
 
 				/* set color palette */
 				if (cellp->glyphp->bitmap[h] & (0x01 << (bdf_padding + w)))
@@ -443,10 +523,16 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 		}
 	}
 
-	/* actual display update (bit blit) */
-	pos = (line * CELL_HEIGHT) * fb->info.line_length;
-	size = CELL_HEIGHT * fb->info.line_length;
-	memcpy(fb->fp + pos, fb->buf + pos, size);
+	/* actual display update (bit blit) - need to copy entire buffer for rotation */
+	if (fb->rotate != 0) {
+		/* with rotation, we need to copy the entire buffer */
+		memcpy(fb->fp, fb->buf, fb->info.screen_size);
+	} else {
+		/* without rotation, we can just copy the line */
+		pos = (line * CELL_HEIGHT) * fb->info.line_length;
+		size = CELL_HEIGHT * fb->info.line_length;
+		memcpy(fb->fp + pos, fb->buf + pos, size);
+	}
 
 	/* TODO: page flip
 		if fb_fix_screeninfo.ypanstep > 0, we can use hardware panning.
