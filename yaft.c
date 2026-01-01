@@ -210,8 +210,8 @@ int main(int argc, char *const argv[])
 	/* get terminal dimensions (may be rotated) */
 	get_terminal_dimensions(&fb, &term_width, &term_height);
 	
-	/* allow override via environment variables */
-	apply_terminal_size_override(&term_width, &term_height);
+	/* allow override via environment variables (with bounds checking) */
+	apply_terminal_size_override(&term_width, &term_height, term_width, term_height);
 	
 	if (!term_init(&term, term_width, term_height)) {
 		logging(FATAL, "terminal initialize failed\n");
