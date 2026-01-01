@@ -294,13 +294,15 @@ bool fb_init(struct framebuffer_t *fb)
 
 	/* initialize rotation */
 	fb->rotate = 0;
-	if ((env = getenv("YAFT")) && strstr(env, "rotate")) {
+	if ((env = getenv("YAFT"))) {
 		/* parse rotate:N from YAFT environment variable */
 		char *rotate_str = strstr(env, "rotate:");
 		if (rotate_str) {
 			char *endptr;
+			errno = 0;
 			long rotate_val = strtol(rotate_str + 7, &endptr, 10); /* skip "rotate:" */
-			if (endptr != (rotate_str + 7) && rotate_val >= 0 && rotate_val <= 3)
+			/* validate: must consume at least one digit, no overflow, and value in range 0-3 */
+			if (errno == 0 && endptr > (rotate_str + 7) && rotate_val >= 0 && rotate_val <= 3)
 				fb->rotate = (int)rotate_val;
 		}
 	}
@@ -398,34 +400,29 @@ static inline void get_physical_dimensions(struct framebuffer_t *fb, int *phys_w
 }
 
 static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y, 
-	int physical_width, int physical_height, int *out_x, int *out_y, int *out_line_offset)
+	int physical_width, int physical_height, int *out_x, int *out_y)
 {
 	/* physical_width and physical_height are the actual hardware dimensions */
 	switch (fb->rotate) {
 	case 0: /* no rotation */
 		*out_x = x;
 		*out_y = y;
-		*out_line_offset = fb->info.line_length;
 		break;
 	case 1: /* 90 degree clockwise */
 		*out_x = physical_height - 1 - y;
 		*out_y = x;
-		*out_line_offset = fb->info.line_length;
 		break;
 	case 2: /* 180 degree */
 		*out_x = physical_width - 1 - x;
 		*out_y = physical_height - 1 - y;
-		*out_line_offset = fb->info.line_length;
 		break;
 	case 3: /* 270 degree clockwise (90 counter-clockwise) */
 		*out_x = y;
 		*out_y = physical_width - 1 - x;
-		*out_line_offset = fb->info.line_length;
 		break;
 	default:
 		*out_x = x;
 		*out_y = y;
-		*out_line_offset = fb->info.line_length;
 		break;
 	}
 }
@@ -433,7 +430,7 @@ static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y,
 static inline void draw_sixel(struct framebuffer_t *fb, int line, int col, uint8_t *pixmap)
 {
 	int h, w, src_offset, dst_offset;
-	int phys_width, phys_height, rot_x, rot_y, line_offset;
+	int phys_width, phys_height, rot_x, rot_y;
 	uint32_t pixel, color = 0;
 
 	get_physical_dimensions(fb, &phys_width, &phys_height);
@@ -445,9 +442,9 @@ static inline void draw_sixel(struct framebuffer_t *fb, int line, int col, uint8
 
 			int x = col * CELL_WIDTH + w;
 			int y = line * CELL_HEIGHT + h;
-			get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y, &line_offset);
+			get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y);
 
-			dst_offset = rot_y * line_offset + rot_x * fb->info.bytes_per_pixel;
+			dst_offset = rot_y * fb->info.line_length + rot_x * fb->info.bytes_per_pixel;
 			pixel = color2pixel(&fb->info, color);
 			memcpy(fb->buf + dst_offset, &pixel, fb->info.bytes_per_pixel);
 		}
@@ -458,7 +455,7 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 {
 	int pos, size, bdf_padding, glyph_width, margin_right;
 	int col, w, h;
-	int phys_width, phys_height, rot_x, rot_y, line_offset;
+	int phys_width, phys_height, rot_x, rot_y;
 	uint32_t pixel;
 	struct color_pair_t color_pair;
 	struct cell_t *cellp;
@@ -505,8 +502,8 @@ static inline void draw_line(struct framebuffer_t *fb, struct terminal_t *term, 
 				int y = line * CELL_HEIGHT + h;
 				
 				/* apply rotation */
-				get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y, &line_offset);
-				pos = rot_y * line_offset + rot_x * fb->info.bytes_per_pixel;
+				get_rotated_pos(fb, x, y, phys_width, phys_height, &rot_x, &rot_y);
+				pos = rot_y * fb->info.line_length + rot_x * fb->info.bytes_per_pixel;
 
 				/* set color palette */
 				if (cellp->glyphp->bitmap[h] & (0x01 << (bdf_padding + w)))
