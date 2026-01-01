@@ -35,10 +35,20 @@ jobs:
           echo "READELF=aarch64-linux-gnu-readelf" >> $GITHUB_ENV
         fi
     
+    - name: Build mkfont_bdf tool with native compiler
+      run: |
+        export LANG=en_US.UTF-8
+        make mkfont_bdf
+    
+    - name: Generate glyph.h
+      run: |
+        export LANG=en_US.UTF-8
+        make glyph.h
+    
     - name: Build yaft statically for ARM
       run: |
         export LANG=en_US.UTF-8
-        make CC=$CC CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3 -pipe" LDFLAGS="-static"
+        make yaft CC=$CC CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3 -pipe" LDFLAGS="-static"
     
     - name: Verify static binary
       run: |
