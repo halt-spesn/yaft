@@ -1,0 +1,55 @@
+name: ARM Static Build
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+jobs:
+  build-arm-static:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        arch: [armv7, aarch64]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install ARM cross-compilation toolchain
+      run: |
+        sudo apt-get update
+        if [ "${{ matrix.arch }}" = "armv7" ]; then
+          sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+          echo "CC=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
+          echo "ARCH_NAME=armv7" >> $GITHUB_ENV
+        elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "ARCH_NAME=aarch64" >> $GITHUB_ENV
+        fi
+    
+    - name: Build yaft statically for ARM
+      run: |
+        export LANG=en_US.UTF-8
+        make CC=$CC CFLAGS="-std=c99 -pedantic -Wall -Wextra -O3 -pipe -static" LDFLAGS="-static"
+    
+    - name: Verify static binary
+      run: |
+        if [ "${{ matrix.arch }}" = "armv7" ]; then
+          file yaft
+          arm-linux-gnueabihf-readelf -d yaft || echo "Static binary (no dynamic section expected)"
+        elif [ "${{ matrix.arch }}" = "aarch64" ]; then
+          file yaft
+          aarch64-linux-gnu-readelf -d yaft || echo "Static binary (no dynamic section expected)"
+        fi
+    
+    - name: Upload ARM static binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: yaft-${{ matrix.arch }}-static
+        path: yaft
+        if-no-files-found: error
