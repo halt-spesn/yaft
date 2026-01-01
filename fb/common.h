@@ -405,23 +405,32 @@ static inline void get_terminal_dimensions(struct framebuffer_t *fb, int *term_w
 static inline void get_rotated_pos(struct framebuffer_t *fb, int x, int y, 
 	int physical_width, int physical_height, int *out_x, int *out_y)
 {
-	/* physical_width and physical_height are the actual hardware dimensions */
+	/* x, y are logical terminal coordinates
+	 * physical_width, physical_height are actual hardware dimensions
+	 * For rotate:1 and rotate:3, terminal dimensions are swapped from physical */
+	
 	switch (fb->rotate) {
 	case 0: /* no rotation */
 		*out_x = x;
 		*out_y = y;
 		break;
 	case 1: /* 90 degree clockwise */
-		*out_x = physical_height - 1 - y;
-		*out_y = x;
+		/* terminal is landscape (wide), physical is portrait (tall)
+		 * terminal coords: x ∈ [0, phys_height), y ∈ [0, phys_width)
+		 * map to physical: px ∈ [0, phys_width), py ∈ [0, phys_height) */
+		*out_x = y;
+		*out_y = physical_height - 1 - x;
 		break;
 	case 2: /* 180 degree */
 		*out_x = physical_width - 1 - x;
 		*out_y = physical_height - 1 - y;
 		break;
 	case 3: /* 270 degree clockwise (90 counter-clockwise) */
-		*out_x = y;
-		*out_y = physical_width - 1 - x;
+		/* terminal is landscape (wide), physical is portrait (tall)
+		 * terminal coords: x ∈ [0, phys_height), y ∈ [0, phys_width)
+		 * map to physical: px ∈ [0, phys_width), py ∈ [0, phys_height) */
+		*out_x = physical_width - 1 - y;
+		*out_y = x;
 		break;
 	default:
 		*out_x = x;
