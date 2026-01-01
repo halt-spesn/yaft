@@ -121,6 +121,34 @@ void tty_die(struct termios *termios_orig)
 	ewrite(STDIN_FILENO, "\033[?25h", 6); /* make cursor visible */
 }
 
+const char *find_shell(void)
+{
+	extern const char *shell_cmd; /* defined in conf.h */
+	char *env_shell;
+	
+	/* try SHELL environment variable first */
+	if ((env_shell = getenv("SHELL")) != NULL && access(env_shell, X_OK) == 0)
+		return env_shell;
+	
+	/* try common shell locations */
+	const char *shells[] = {
+		"/bin/sh",
+		"/sbin/sh",
+		"/bin/bash",
+		"/bin/ash",
+		"/system/bin/sh", /* Android */
+		NULL
+	};
+	
+	for (int i = 0; shells[i] != NULL; i++) {
+		if (access(shells[i], X_OK) == 0)
+			return shells[i];
+	}
+	
+	/* fall back to configured default */
+	return shell_cmd;
+}
+
 bool fork_and_exec(int *master, const char *cmd, char *const argv[], int lines, int cols)
 {
 	pid_t pid;
@@ -186,7 +214,7 @@ int main(int argc, char *const argv[])
 	}
 
 	/* fork and exec shell */
-	cmd = (argc < 2) ? shell_cmd: argv[1];
+	cmd = (argc < 2) ? find_shell(): argv[1];
 	if (!fork_and_exec(&term.fd, cmd, argv + 1, term.lines, term.cols)) {
 		logging(FATAL, "forkpty failed\n");
 		goto tty_init_failed;
