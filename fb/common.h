@@ -390,100 +390,15 @@ static inline void get_physical_dimensions(struct framebuffer_t *fb, int *phys_w
 	*phys_height = fb->info.height;
 }
 
-static inline double get_scale_factor(void)
-{
-	char *env_scale, *endptr;
-	double scale_val;
-	const double valid_scales[] = {0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
-	const int num_scales = sizeof(valid_scales) / sizeof(valid_scales[0]);
-	
-	/* Check for YAFT_SCALE environment variable */
-	if ((env_scale = getenv("YAFT_SCALE")) != NULL) {
-		errno = 0;
-		scale_val = strtod(env_scale, &endptr);
-		
-		/* Validate parsing was successful */
-		if (errno == 0 && endptr > env_scale && scale_val > 0) {
-			/* Check if scale is one of the allowed values */
-			for (int i = 0; i < num_scales; i++) {
-				if (fabs(scale_val - valid_scales[i]) < 0.01) {
-					logging(DEBUG, "scale factor set to %.2f via YAFT_SCALE\n", valid_scales[i]);
-					return valid_scales[i];
-				}
-			}
-			logging(WARN, "YAFT_SCALE=%.2f is not a valid scale (valid: 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0), using 1.0\n", 
-				scale_val);
-		}
-	}
-	
-	return 1.0; /* default: no scaling */
-}
-
 static inline void get_terminal_dimensions(struct framebuffer_t *fb, int *term_width, int *term_height)
 {
-	double scale;
-	int base_width, base_height;
-	
-	/* Get base dimensions (may be rotated) */
+	/* For 90/270 degree rotation, terminal dimensions are swapped from physical */
 	if (fb->rotate == 1 || fb->rotate == 3) {
-		base_width = fb->info.height;
-		base_height = fb->info.width;
+		*term_width = fb->info.height;
+		*term_height = fb->info.width;
 	} else {
-		base_width = fb->info.width;
-		base_height = fb->info.height;
-	}
-	
-	/* Apply scale factor if set */
-	scale = get_scale_factor();
-	*term_width = (int)(base_width / scale);
-	*term_height = (int)(base_height / scale);
-}
-
-static inline void apply_terminal_size_override(int *term_width, int *term_height, 
-	int max_width, int max_height)
-{
-	char *env_cols, *env_lines, *endptr;
-	long cols_val, lines_val;
-	int requested_width, requested_height;
-	
-	/* Check for YAFT_COLS environment variable */
-	if ((env_cols = getenv("YAFT_COLS")) != NULL) {
-		errno = 0;
-		cols_val = strtol(env_cols, &endptr, 10);
-		if (errno == 0 && endptr > env_cols && cols_val > 0 && cols_val <= 500) {
-			/* Calculate requested width */
-			requested_width = (int)cols_val * CELL_WIDTH;
-			
-			/* Validate it fits within framebuffer */
-			if (requested_width <= max_width) {
-				*term_width = requested_width;
-				logging(DEBUG, "terminal width overridden via YAFT_COLS=%ld (width=%d)\n", 
-					cols_val, *term_width);
-			} else {
-				logging(WARN, "YAFT_COLS=%ld exceeds framebuffer width (requested=%d, max=%d), ignoring\n",
-					cols_val, requested_width, max_width);
-			}
-		}
-	}
-	
-	/* Check for YAFT_LINES environment variable */
-	if ((env_lines = getenv("YAFT_LINES")) != NULL) {
-		errno = 0;
-		lines_val = strtol(env_lines, &endptr, 10);
-		if (errno == 0 && endptr > env_lines && lines_val > 0 && lines_val <= 200) {
-			/* Calculate requested height */
-			requested_height = (int)lines_val * CELL_HEIGHT;
-			
-			/* Validate it fits within framebuffer */
-			if (requested_height <= max_height) {
-				*term_height = requested_height;
-				logging(DEBUG, "terminal height overridden via YAFT_LINES=%ld (height=%d)\n", 
-					lines_val, *term_height);
-			} else {
-				logging(WARN, "YAFT_LINES=%ld exceeds framebuffer height (requested=%d, max=%d), ignoring\n",
-					lines_val, requested_height, max_height);
-			}
-		}
+		*term_width = fb->info.width;
+		*term_height = fb->info.height;
 	}
 }
 

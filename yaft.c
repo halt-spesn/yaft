@@ -207,22 +207,8 @@ int main(int argc, char *const argv[])
 		goto fb_init_failed;
 	}
 
-	/* get terminal dimensions (may be rotated and scaled) */
+	/* get terminal dimensions (may be rotated) */
 	get_terminal_dimensions(&fb, &term_width, &term_height);
-	
-	/* get physical dimensions for bounds checking */
-	int phys_width, phys_height;
-	get_physical_dimensions(&fb, &phys_width, &phys_height);
-	
-	/* for rotated displays, swap physical dimensions for proper bounds checking */
-	if (fb.rotate == 1 || fb.rotate == 3) {
-		int temp = phys_width;
-		phys_width = phys_height;
-		phys_height = temp;
-	}
-	
-	/* allow override via environment variables (with bounds checking against physical dims) */
-	apply_terminal_size_override(&term_width, &term_height, phys_width, phys_height);
 	
 	if (!term_init(&term, term_width, term_height)) {
 		logging(FATAL, "terminal initialize failed\n");
